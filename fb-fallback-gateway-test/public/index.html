@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaxChat - Facebook Fallback Gateway UI</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col font-sans text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+        <i class="fa-brands fa-facebook-messenger text-xl"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg text-slate-900 leading-tight">MaxChat FB Gateway</h1>
+        <p class="text-xs text-slate-500">24-hour limit bypass & Conversation Manager</p>
+      </div>
+    </div>
+
+    <!-- Page Selector & Status Controls -->
+    <div class="flex items-center space-x-3">
+      
+      <!-- Fanpage Dropdown Selector -->
+      <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 space-x-2">
+        <i class="fa-solid fa-flag text-blue-600 text-xs"></i>
+        <span class="text-xs font-semibold text-slate-600">Page:</span>
+        <select id="pageSelect" onchange="onPageChange()" class="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none max-w-[200px] cursor-pointer">
+          <option value="">Loading pages...</option>
+        </select>
+        <button onclick="loadPages()" title="Reload pages" class="text-slate-400 hover:text-blue-600 ml-1 text-xs">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+
+      <!-- Manual Page ID Input -->
+      <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 space-x-1.5" title="Enter custom Page ID if not listed">
+        <span class="text-[11px] text-slate-400">Custom ID:</span>
+        <input type="text" id="manualPageId" onchange="onManualPageChange()" placeholder="Paste ID..." 
+               class="bg-transparent text-xs font-medium text-slate-800 focus:outline-none w-24">
+      </div>
+
+      <!-- Gateway Connection Status -->
+      <div id="statusBadge" class="flex items-center space-x-2 bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-medium">
+        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+
+      <button onclick="checkHealth()" title="Refresh Status" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition">
+        <i class="fa-solid fa-rotate-right text-sm"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- Sidebar: Conversations List -->
+    <aside class="w-80 bg-white border-r border-slate-200 flex flex-col">
+      <!-- Search & Refresh bar -->
+      <div class="p-3 border-b border-slate-100 flex items-center space-x-2">
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+          <input type="text" id="searchThread" oninput="filterThreads()" placeholder="Search name or ID..." 
+                 class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+        </div>
+        <button onclick="loadThreads()" class="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition" title="Reload conversations">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+
+      <!-- Thread list container -->
+      <div id="threadsContainer" class="flex-1 overflow-y-auto divide-y divide-slate-50 p-1">
+        <div class="p-6 text-center text-xs text-slate-400 flex flex-col items-center justify-center h-full">
+          <i class="fa-regular fa-comments text-3xl mb-2 text-slate-300"></i>
+          <span>Select or switch Page above to load conversations</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Chat Area -->
+    <main class="flex-1 bg-slate-50 flex flex-col">
+      
+      <!-- Chat Header -->
+      <div id="chatHeader" class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div id="chatAvatar" class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm">
+            ?
+          </div>
+          <div>
+            <h2 id="chatName" class="font-bold text-sm text-slate-800">No conversation selected</h2>
+            <p id="chatRecipientId" class="text-xs text-slate-400">Recipient ID: ---</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="loadMessages()" id="btnRefreshMsg" class="hidden px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition">
+            <i class="fa-solid fa-arrow-rotate-right mr-1"></i> Reload Messages
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Area -->
+      <div id="messagesContainer" class="flex-1 overflow-y-auto p-6 space-y-4">
+        <div class="flex flex-col items-center justify-center h-full text-slate-400 text-xs">
+          <i class="fa-solid fa-paper-plane text-4xl mb-3 text-slate-300"></i>
+          <span>Select a conversation on the left to start chatting and testing Fallback</span>
+        </div>
+      </div>
+
+      <!-- Quick Message Sender Box -->
+      <div class="bg-white border-t border-slate-200 p-4">
+        <form onsubmit="handleSendMessage(event)" class="flex items-center space-x-3">
+          <div class="flex-1 relative">
+            <input type="text" id="messageInput" placeholder="Type message to send..." 
+                   class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
+          </div>
+          <button type="submit" id="btnSend" class="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition shadow-md shadow-blue-500/20">
+            <span>Send</span>
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+          </button>
+        </form>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400 px-1">
+          <span id="actingAsText">? Sending as: Personal Account</span>
+          <span id="sendNotice" class="font-medium text-emerald-600"></span>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Client Script -->
+  <script>
+    const API_BASE = 'http://localhost:4000';
+    let allThreads = [];
+    let currentThread = null;
+    let availablePages = [];
+
+    function getActivePageId() {
+      const manual = document.getElementById('manualPageId').value.trim();
+      if (manual) return manual;
+      return document.getElementById('pageSelect').value;
+    }
+
+    // 1. Check Health
+    async function checkHealth() {
+      const badge = document.getElementById('statusBadge');
+      const text = document.getElementById('statusText');
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        if (data.status === 'ready') {
+          badge.className = 'flex items-center space-x-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-medium';
+          text.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-500"></i> Facebook Ready';
+          if (availablePages.length === 0) loadPages();
+        } else {
+          badge.className = 'flex items-center space-x-2 bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-medium';
+          text.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i> Missing appstate.json';
+        }
+      } catch (err) {
+        badge.className = 'flex items-center space-x-2 bg-rose-50 border border-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-xs font-medium';
+        text.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-500"></i> Gateway Offline';
+      }
+    }
+
+    // 2. Load Fanpage List
+    async function loadPages() {
+      const select = document.getElementById('pageSelect');
+      try {
+        const res = await fetch(`${API_BASE}/api/pages`);
+        const data = await res.json();
+
+        if (data.success && data.pages) {
+          availablePages = data.pages;
+          select.innerHTML = data.pages.map(p => `
+            <option value="${p.pageId}">${p.isPersonal ? '?? ' : '?? '}${p.name}</option>
+          `).join('');
+
+          updateActingAsText();
+          loadThreads();
+        }
+      } catch (err) {
+        select.innerHTML = '<option value="">Personal Account</option>';
+      }
+    }
+
+    function onPageChange() {
+      document.getElementById('manualPageId').value = '';
+      updateActingAsText();
+      loadThreads();
+    }
+
+    function onManualPageChange() {
+      updateActingAsText();
+      loadThreads();
+    }
+
+    function updateActingAsText() {
+      const pageId = getActivePageId();
+      const select = document.getElementById('pageSelect');
+      const selectedName = select.options[select.selectedIndex]?.text || '';
+      const text = document.getElementById('actingAsText');
+
+      if (pageId) {
+        text.innerHTML = `?? Chatting as: <strong class="text-blue-600">${selectedName || pageId}</strong> (Page ID: ${pageId})`;
+      } else {
+        text.innerHTML = `?? Chatting as: <strong class="text-slate-700">Personal Account</strong>`;
+      }
+    }
+
+    // 3. Load Conversations
+    async function loadThreads() {
+      const container = document.getElementById('threadsContainer');
+      const pageId = getActivePageId();
+      container.innerHTML = `
+        <div class="p-8 text-center text-xs text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-xl mb-2 text-blue-500"></i>
+          <p>Loading conversations...</p>
+        </div>
+      `;
+
+      try {
+        const url = pageId ? `${API_BASE}/api/threads?pageId=${pageId}&limit=30` : `${API_BASE}/api/threads?limit=30`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.success && data.threads) {
+          allThreads = data.threads;
+          renderThreads(allThreads);
+        } else {
+          container.innerHTML = `<div class="p-6 text-center text-xs text-rose-500">Error: ${data.error?.message || 'Unable to load conversations'}</div>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-rose-500">Gateway API Connection Error</div>`;
+      }
+    }
+
+    function renderThreads(threads) {
+      const container = document.getElementById('threadsContainer');
+      if (threads.length === 0) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-slate-400">No conversations found</div>`;
+        return;
+      }
+
+      container.innerHTML = threads.map(t => {
+        const isSelected = currentThread && currentThread.threadID === t.threadID;
+        const initial = (t.name || 'U').charAt(0).toUpperCase();
+        return `
+          <div onclick="selectThread('${t.threadID}')" 
+               class="p-3.5 hover:bg-slate-50 cursor-pointer transition flex items-center space-x-3 rounded-lg mx-1 ${isSelected ? 'bg-blue-50/80 border border-blue-200/60' : ''}">
+            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+              ${initial}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between mb-0.5">
+                <h4 class="text-xs font-bold text-slate-800 truncate">${t.name}</h4>
+                ${t.unreadCount > 0 ? `<span class="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">${t.unreadCount}</span>` : ''}
+              </div>
+              <p class="text-[11px] text-slate-500 truncate">${t.snippet || 'No messages'}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterThreads() {
+      const q = document.getElementById('searchThread').value.toLowerCase();
+      const filtered = allThreads.filter(t => (t.name && t.name.toLowerCase().includes(q)) || t.threadID.includes(q));
+      renderThreads(filtered);
+    }
+
+    // 4. Select Conversation
+    function selectThread(threadID) {
+      currentThread = allThreads.find(t => t.threadID === threadID);
+      if (!currentThread) return;
+
+      document.getElementById('chatName').textContent = currentThread.name;
+      document.getElementById('chatRecipientId').textContent = `Recipient ID: ${currentThread.threadID}`;
+      document.getElementById('chatAvatar').textContent = (currentThread.name || 'U').charAt(0).toUpperCase();
+      document.getElementById('btnRefreshMsg').classList.remove('hidden');
+
+      renderThreads(allThreads);
+      loadMessages();
+    }
+
+    // 5. Load Message History
+    async function loadMessages() {
+      if (!currentThread) return;
+      const container = document.getElementById('messagesContainer');
+      const pageId = getActivePageId();
+
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full text-xs text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-blue-500"></i>
+          <span>Loading messages...</span>
+        </div>
+      `;
+
+      try {
+        const url = pageId 
+          ? `${API_BASE}/api/threads/${currentThread.threadID}/messages?pageId=${pageId}&limit=30`
+          : `${API_BASE}/api/threads/${currentThread.threadID}/messages?limit=30`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.success && data.messages) {
+          renderMessages(data.messages);
+        } else {
+          container.innerHTML = `<div class="p-6 text-center text-xs text-rose-500">Error: ${data.error?.message || 'Unable to load message history'}</div>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-rose-500">Server Connection Error</div>`;
+      }
+    }
+
+    function renderMessages(messages) {
+      const container = document.getElementById('messagesContainer');
+      if (!messages || messages.length === 0) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-slate-400">No messages in this conversation</div>`;
+        return;
+      }
+
+      const pageId = getActivePageId();
+
+      container.innerHTML = messages.map(m => {
+        const isMe = (pageId && m.senderID === pageId) || (!pageId && m.senderID !== currentThread.threadID);
+        
+        return `
+          <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
+            <div class="max-w-[70%] rounded-2xl px-4 py-2.5 text-xs ${isMe ? 'bg-blue-600 text-white rounded-br-none shadow-sm' : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-none shadow-sm'}">
+              <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(m.body || '[Attachment / Sticker]')}</p>
+              <div class="text-[9px] mt-1 ${isMe ? 'text-blue-200 text-right' : 'text-slate-400'}">
+                ${m.timestamp ? new Date(parseInt(m.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // 6. Send Message
+    async function handleSendMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('messageInput');
+      const message = input.value.trim();
+      if (!message || !currentThread) return;
+
+      const pageId = getActivePageId();
+      const notice = document.getElementById('sendNotice');
+      const btnSend = document.getElementById('btnSend');
+
+      btnSend.disabled = true;
+      btnSend.classList.add('opacity-70');
+      notice.textContent = 'Sending via gateway...';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipientId: currentThread.threadID,
+            message: message,
+            pageId: pageId || undefined
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          input.value = '';
+          notice.textContent = '? Message sent successfully!';
+          setTimeout(() => { notice.textContent = ''; }, 3000);
+          loadMessages();
+        } else {
+          alert('Send failed: ' + JSON.stringify(data.error));
+          notice.textContent = '? Send failed';
+        }
+      } catch (err) {
+        alert('Server connection error while sending message');
+        notice.textContent = '? Connection error';
+      } finally {
+        btnSend.disabled = false;
+        btnSend.classList.remove('opacity-70');
+      }
+    }
+
+    function escapeHtml(text) {
+      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+      return text.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Auto check on page load
+    checkHealth();
+  </script>
+</body>
+</html>
